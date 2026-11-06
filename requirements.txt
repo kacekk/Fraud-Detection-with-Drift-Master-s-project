@@ -1,0 +1,17 @@
+# Exact versions so every machine computes exactly the same results.
+# Works with Python 3.12, 3.13 and 3.14 on Windows, macOS (Intel and Apple Silicon) and Linux.
+
+# core numerical stack (these decide the results)
+numpy==2.5.3
+pandas==3.0.5
+scipy==1.18.1
+scikit-learn==1.9.1
+river==0.26.1
+
+# plots, app, notebook, tests
+matplotlib==3.11.2
+streamlit==1.67.0
+jupyterlab==4.6.6
+ipykernel==7.4.0
+nbconvert==7.17.2
+pytest==9.2.0

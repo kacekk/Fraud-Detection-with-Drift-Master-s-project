@@ -1,0 +1,23 @@
+# virtual environment created by run.py
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# data you download yourself (too large / licensed separately)
+data/*.csv
+data/*.zip
+
+# temporary results from quick test runs
+results/*_quick/
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

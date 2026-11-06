@@ -1,0 +1,5 @@
+Strategy,AUC before drift,AUC after drift,PR-AUC after drift,Recovery delay (months),F1,Retrainings,Missed frauds,False alarms,Missed fraud (EUR),Total cost (EUR)
+Static baseline,0.937,0.616,0.107,not recovered,0.171,0,3365,1786,91093.43,117883.43
+Sliding window,0.934,0.989,0.915,0,0.775,16,876,871,54108.18,75173.18
+Detector-triggered,0.937,0.964,0.867,2,0.735,2,989,1049,53983.53,70718.53
+Online learning,0.949,0.984,0.902,0,0.724,continuous,1306,238,94228.53,97798.53

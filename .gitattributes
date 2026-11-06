@@ -1,0 +1,6 @@
+# Keep line endings correct on both Windows and macOS
+* text=auto eol=lf
+*.bat text eol=crlf
+*.command text eol=lf
+*.png binary
+*.ipynb text eol=lf

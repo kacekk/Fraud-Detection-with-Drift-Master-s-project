@@ -1,0 +1,6 @@
+{
+  "_note": "Fingerprints of `python run_experiment.py --quick` with the pinned package versions. The same numbers must come out on Windows, macOS and Linux.",
+  "sudden_quick": "1b42f2bf5829d7ca",
+  "gradual_quick": "192c43238a35de87",
+  "recurring_quick": "be7ee402f4fdfc7a"
+}
