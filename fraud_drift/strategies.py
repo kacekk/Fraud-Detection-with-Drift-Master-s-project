@@ -60,8 +60,12 @@ def _months(stream: pd.DataFrame, start: int, stop: int) -> pd.DataFrame:
 
 
 def _fit_forest(train: pd.DataFrame, features: list[str], cfg: ExperimentConfig) -> RandomForestClassifier:
-    clf = RandomForestClassifier(n_estimators=cfg.n_trees, random_state=cfg.seed, n_jobs=1)
+    # Trees are trained in parallel: each tree gets its own seed derived from cfg.seed, so the
+    # forest is identical whatever the number of cores. Prediction runs single-threaded so the
+    # averaging of tree probabilities always happens in the same order (bit-identical results).
+    clf = RandomForestClassifier(n_estimators=cfg.n_trees, random_state=cfg.seed, n_jobs=-1)
     clf.fit(train[features].to_numpy(), train["is_fraud"].to_numpy())
+    clf.set_params(n_jobs=1)
     return clf
 
 

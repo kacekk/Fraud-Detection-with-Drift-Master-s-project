@@ -4,9 +4,12 @@
 M.Sc. thesis project, Big Data Science, Kozminski University (Kacper Matejczuk)
 
 Fraudsters keep changing their tactics, so a fraud model trained on last year's fraud slowly stops
-working. This is called **concept drift**. This project simulates a stream of card transactions in which
-the fraud pattern changes at a known moment. It then compares four ways of keeping a fraud model up to date,
-measuring detection quality, recovery time and cost in euro.
+working. This is called **concept drift**. This project compares four ways of keeping a fraud model up to
+date, measuring detection quality, recovery time and cost in euro, on two kinds of data:
+
+- a **synthetic stream** in which the fraud pattern changes at a moment we choose (controlled experiment), and
+- **real e-commerce transactions** from the IEEE-CIS Fraud Detection dataset (Vesta Corporation), where fraud
+  changes naturally.
 
 ![App screenshot](docs/app_screenshot.png)
 
@@ -44,6 +47,7 @@ Nothing is installed outside the project folder. To remove everything, delete th
 python run.py               # interactive app (default)
 python run.py notebook      # thesis notebook in JupyterLab
 python run.py experiment    # full benchmark -> saves CSVs, charts and run_info.json to results/
+python run.py experiment --ieee   # the same on the real IEEE-CIS data (after downloading it)
 python run.py test          # automated tests, including the reproducibility check
 ```
 
@@ -73,8 +77,24 @@ Three types of drift are simulated (Gama et al., 2014; Lu et al., 2019):
 - **recurring**: B appears, and later A comes back
 
 Because the drift is injected, we know exactly when it happened, which makes it possible to measure
-how long each method needs to recover. The public **Kaggle credit-card dataset** (ULB) can be added as a
-realism check (see [`data/README.md`](data/README.md)).
+how long each method needs to recover.
+
+### 1b. Real data: IEEE-CIS Fraud Detection
+
+The same four strategies also run on **590,540 real e-commerce card transactions** (Vesta Corporation,
+IEEE-CIS competition on Kaggle, 2019; about 3.5% fraud, roughly six months). The timeline is cut into
+two-week periods. Real data has no recorded drift moment, so it cannot measure recovery delay, but it shows
+whether the ranking and the cost trade-offs found on the synthetic stream hold in practice.
+
+The data needs a Kaggle login, so it is not in this repository. Download steps:
+[`data/ieee-cis/README.md`](data/ieee-cis/README.md). After that:
+
+```bash
+python run.py experiment --ieee
+```
+
+and "IEEE-CIS (real e-commerce)" appears as a data source in the app. The ULB credit-card dataset can be added
+as well (see [`data/README.md`](data/README.md)).
 
 ### 2. The four strategies
 
@@ -125,7 +145,9 @@ Running the same settings again gives **exactly the same numbers**, on Windows, 
 - **One seed controls everything.** The data generator, the Random Forests and the Adaptive Random Forest
   all take their seed from the config (`seed: 42` in [`configs/default.json`](configs/default.json)).
   No step uses unseeded randomness.
-- **Single-threaded models** (`n_jobs=1`), so parallel processing cannot change the order of computation.
+- **Thread count does not matter.** Random Forest trees are trained in parallel, but each tree gets its own
+  seed derived from the config, and predictions are averaged single-threaded in a fixed order. The tests
+  check that the forest gives bit-identical predictions.
 - **Pinned package versions** in [`requirements.txt`](requirements.txt). The launcher installs exactly
   these versions.
 - **Fingerprints.** Every run saves a hash of all monthly results in `results/<drift>/run_info.json`,
@@ -155,7 +177,8 @@ Running the same settings again gives **exactly the same numbers**, on Windows, 
 ├── configs/default.json       all settings, including the seed
 ├── fraud_drift/               the shared code (used by app, notebook and script)
 │   ├── config.py              ExperimentConfig: every setting in one place
-│   ├── data.py                synthetic stream with injected drift + Kaggle loader
+│   ├── data.py                synthetic stream with injected drift + ULB Kaggle loader
+│   ├── ieee.py                IEEE-CIS loader (two-week periods, compact feature set, cache)
 │   ├── strategies.py          static, sliding window, detector-triggered, online
 │   ├── metrics.py             AUC, PR-AUC, F1, recovery delay, cost, fingerprint
 │   ├── experiment.py          runs all strategies, builds the summary table
@@ -165,7 +188,7 @@ Running the same settings again gives **exactly the same numbers**, on Windows, 
 │   └── build_notebook.py           regenerates the notebook from source
 ├── results/                   saved results of the default benchmark
 ├── tests/                     reproducibility and sanity tests
-├── data/                      put Kaggle creditcard.csv here (optional, not on GitHub)
+├── data/                      real datasets you download yourself (IEEE-CIS, ULB); not on GitHub
 └── .github/workflows/         automatic tests on Windows, macOS and Linux
 ```
 
@@ -178,6 +201,7 @@ python run.py experiment --drift gradual
 python run.py experiment --seed 7
 python run.py experiment --config configs/my_settings.json
 python run.py experiment --kaggle data/creditcard.csv
+python run.py experiment --ieee
 ```
 
 ## Key references

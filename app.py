@@ -29,6 +29,7 @@ from fraud_drift import (
     run_experiment,
     summary_table,
 )
+from fraud_drift import ieee
 from fraud_drift.data import share_of_new_pattern
 from fraud_drift.plotting import COLORS, INK, MUTED, plot_costs, plot_metric
 
@@ -133,10 +134,18 @@ def cached_kaggle(n_months: int):
 
 
 @st.cache_resource(show_spinner=False)
+def cached_ieee():
+    return ieee.load_ieee()
+
+
+@st.cache_resource(show_spinner=False)
 def cached_results(cfg_dict: dict, source: str):
     cfg = ExperimentConfig.from_dict(cfg_dict)
     if source == "kaggle":
         stream, features = cached_kaggle(cfg.n_months)
+        return run_experiment(cfg, stream=stream, features=features)
+    if source == "ieee":
+        stream, features = cached_ieee()
         return run_experiment(cfg, stream=stream, features=features)
     return run_experiment(cfg, stream=cached_stream(cfg_dict))
 
@@ -148,11 +157,13 @@ defaults = ExperimentConfig()
 sb = st.sidebar
 sb.markdown("### Settings")
 
-sources = ["Synthetic stream"]
-if KAGGLE_PATH.exists():
-    sources.append("Kaggle credit-card data")
-source_label = sb.radio("Data source", sources, label_visibility="collapsed" if len(sources) == 1 else "visible")
-source = "kaggle" if source_label.startswith("Kaggle") else "synthetic"
+SOURCES = {"synthetic": "Synthetic stream (controlled drift)", "ieee": "IEEE-CIS (real e-commerce)",
+           "kaggle": "ULB credit-card (real, 2 days)"}
+available = ["synthetic"] + (["ieee"] if ieee.is_available() else []) + (["kaggle"] if KAGGLE_PATH.exists() else [])
+source = sb.radio("Data source", available, format_func=SOURCES.get)
+if len(available) == 1:
+    sb.caption("Add the IEEE-CIS files to data/ieee-cis/ to unlock real data (see data/README.md).")
+unit = "two-week period" if source == "ieee" else "month"
 
 sb.markdown('<div class="side-title">Stream</div>', unsafe_allow_html=True)
 if source == "synthetic":
@@ -169,6 +180,13 @@ if source == "synthetic":
     if drift_type == "recurring":
         recur_month = sb.slider("Old pattern returns in month", drift_month + 1, n_months - 1, recur_month)
     fraud_rate = sb.slider("Fraud rate", 0.01, 0.20, defaults.fraud_rate, step=0.01, format="%.2f")
+elif source == "ieee":
+    with st.spinner("Loading IEEE-CIS (first time: about a minute, then cached)"):
+        ieee_stream, _ = cached_ieee()
+    drift_type, per_month, n_months, drift_month = "none", defaults.per_month, int(ieee_stream.month.max()) + 1, 2
+    transition, recur_month, fraud_rate = defaults.transition_months, defaults.recur_month, defaults.fraud_rate
+    sb.caption(f"{len(ieee_stream):,} real transactions in {n_months} two-week periods. "
+               "The drift is natural, so its timing is unknown.")
 else:
     drift_type, per_month, n_months, drift_month = "none", defaults.per_month, 12, defaults.drift_month
     transition, recur_month, fraud_rate = defaults.transition_months, defaults.recur_month, defaults.fraud_rate
@@ -179,7 +197,7 @@ seed = sb.number_input("Random seed", 0, 99999, defaults.seed,
 
 with sb.expander("Models", expanded=False):
     n_trees = st.slider("Random Forest trees", 20, 300, defaults.n_trees, step=20)
-    window = st.slider("Retraining window (months)", 1, 6, defaults.window)
+    window = st.slider(f"Retraining window ({unit}s)", 1, 6, defaults.window)
     detector = st.selectbox("Drift detector", ["adwin", "ddm"], format_func=str.upper)
     delta = defaults.adwin_delta
     if detector == "adwin":
@@ -196,7 +214,7 @@ with sb.expander("Models", expanded=False):
     threshold = st.slider("Alarm threshold", 0.05, 0.95, defaults.threshold, step=0.05)
 
 with sb.expander("Realism and costs", expanded=False):
-    label_delay = st.slider("Label delay (months)", 0, 3, defaults.label_delay,
+    label_delay = st.slider(f"Label delay ({unit}s)", 0, 3, defaults.label_delay,
                             help="Fraud is confirmed weeks later through chargebacks. "
                                  "Models only learn from months whose labels have arrived.")
     investigation_cost = st.number_input("Checking one false alarm (EUR)", 0.0, 1000.0,
@@ -230,8 +248,8 @@ st.markdown(
 <div class="eyebrow">M.Sc. thesis · Kozminski University</div>
 <h1 class="title">When Fraud Patterns Change</h1>
 <p class="lede">Fraudsters change tactics, so a model trained on yesterday's fraud slowly stops working.
-This is <b>concept drift</b>. The app streams synthetic card transactions in which the fraud pattern changes at
-a known month, and compares four ways of keeping a fraud model up to date.</p>
+This is <b>concept drift</b>. The app compares four ways of keeping a fraud model up to date, on a synthetic
+stream where we control exactly when fraud changes, and on real e-commerce transactions (IEEE-CIS).</p>
 """,
     unsafe_allow_html=True,
 )
@@ -284,12 +302,13 @@ with tab_bench:
         metric = st.segmented_control("Metric", list(METRIC_NAMES), format_func=METRIC_NAMES.get,
                                       default="pr_auc", label_visibility="collapsed") or "pr_auc"
         fig, ax = plt.subplots(figsize=(11, 4.6))
-        plot_metric(results, cfg, metric, ax=ax)
+        plot_metric(results, cfg, metric, ax=ax, xlabel=unit.capitalize(),
+                    title=None if source == "synthetic" else f"{METRIC_NAMES[metric]} by {unit} · {SOURCES[source]}")
         show(fig)
         alarms = results["triggered"].alarms
         st.markdown(
             f'<span class="note">Dotted purple lines mark {cfg.detector.upper()} drift alarms '
-            f'({", ".join(f"month {m}" for m in alarms)}); the model is retrained after each one.</span>'
+            f'({", ".join(f"{unit} {m}" for m in alarms)}); the model is retrained after each one.</span>'
             if alarms else f'<span class="note">{cfg.detector.upper()} raised no drift alarm with these settings.</span>',
             unsafe_allow_html=True,
         )
@@ -335,6 +354,10 @@ with tab_live:
         with st.spinner("Preparing the stream"):
             results = get_results()
         stream = cached_stream(cfg.to_dict()) if source == "synthetic" else None
+        sample_cols = ["amount", "hour", "n_txn_1h", "foreign", "device_new", "is_fraud", "pattern"]
+        if source == "ieee":
+            stream = cached_ieee()[0]
+            sample_cols = ["TransactionID", "amount", "hour", "ProductCD=W", "C1", "D1", "is_fraud"]
 
         status_ph, chart_ph, cards_ph, feed_ph = st.empty(), st.empty(), st.empty(), st.empty()
         for i, m in enumerate(cfg.eval_months):
@@ -353,10 +376,11 @@ with tab_live:
                 badge = '<span class="badge new">new fraud pattern</span>'
             if m in results["triggered"].alarms:
                 badge += '<span class="badge alarm">drift alarm, retraining</span>'
-            status_ph.markdown(f"<div><b>Month {m}</b>&nbsp;&nbsp;{badge}</div>", unsafe_allow_html=True)
+            status_ph.markdown(f"<div><b>{unit.capitalize()} {m}</b>&nbsp;&nbsp;{badge}</div>", unsafe_allow_html=True)
 
             fig, ax = plt.subplots(figsize=(11, 4.6))
-            plot_metric(shown, cfg, "pr_auc", ax=ax, title=f"PR-AUC as the stream arrives · month {m}")
+            plot_metric(shown, cfg, "pr_auc", ax=ax, title=f"PR-AUC as the stream arrives · {unit} {m}",
+                        xlabel=unit.capitalize())
             fig.tight_layout()
             chart_ph.pyplot(fig, width="stretch")
             plt.close(fig)
@@ -375,8 +399,7 @@ with tab_live:
             cards_ph.markdown("".join(html), unsafe_allow_html=True)
 
             if stream is not None:
-                sample = stream[stream.month == m].head(6)[["amount", "hour", "n_txn_1h", "foreign",
-                                                            "device_new", "is_fraud", "pattern"]]
+                sample = stream[stream.month == m].head(6)[[c for c in sample_cols if c in stream]]
                 feed_ph.dataframe(sample, width="stretch", hide_index=True)
             time.sleep(speed)
         st.success("Stream finished. The Benchmark tab has the full summary and costs.")
@@ -386,7 +409,49 @@ with tab_live:
 # tab 3: data
 # ----------------------------------------------------------------------------
 with tab_data:
-    if source != "synthetic":
+    if source == "ieee":
+        st.markdown("#### Where the data comes from")
+        st.markdown(
+            '<p class="lede" style="font-size:.95rem">Real e-commerce card transactions provided by '
+            "<b>Vesta Corporation</b> for the IEEE Computational Intelligence Society fraud detection competition "
+            "(Kaggle, 2019). Only the labelled training file is used: 590,540 transactions, about 3.5% fraud, "
+            "covering roughly six months. Most columns are anonymised by the provider (card1–6, C1–14, D1–15, "
+            "M1–9). The timeline is cut into two-week periods. Unlike the synthetic stream, the fraud patterns "
+            "here change naturally, so nobody knows exactly when drift happens.</p>",
+            unsafe_allow_html=True,
+        )
+        stream, features = cached_ieee()
+        per = stream.groupby("month").agg(transactions=("is_fraud", "size"), fraud_rate=("is_fraud", "mean"))
+        c1, c2 = st.columns(2)
+        with c1:
+            fig, ax = plt.subplots(figsize=(6, 3.3))
+            ax.bar(per.index, per.fraud_rate, color="#1F3A5F", width=0.68)
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.1%}"))
+            ax.set_title("Fraud rate per two-week period")
+            ax.set_xlabel("Two-week period")
+            show(fig)
+        with c2:
+            prod = [c for c in features if c.startswith("ProductCD=")]
+            fraud = stream[stream.is_fraud == 1]
+            mix = fraud.groupby("month")[prod].mean()
+            fig, ax = plt.subplots(figsize=(6, 3.3))
+            bottom = None
+            shades = ["#1F3A5F", "#3F6FA8", "#7FA3CC", "#B9CCE3", "#DCE5F0"]
+            for c, col in zip(prod, shades):
+                ax.bar(mix.index, mix[c], bottom=bottom, color=col, width=0.68, label=c.split("=")[1])
+                bottom = mix[c] if bottom is None else bottom + mix[c]
+            ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda v, _: f"{v:.0%}"))
+            ax.set_title("Fraud by product type (natural drift)")
+            ax.set_xlabel("Two-week period")
+            ax.legend(title="ProductCD", loc="upper left", bbox_to_anchor=(1, 1), fontsize=8, title_fontsize=8)
+            show(fig)
+        st.markdown(f'<p class="note">{len(features)} features are used: amount, hour of day, card and address '
+                    "fields, distances, counting features C1–C14, time-delta features D1–D4/D10/D11/D15, match "
+                    "flags M1–M6, e-mail domains, product type and device type. Missing values are set to -1 and "
+                    "categories are encoded without using the labels.</p>", unsafe_allow_html=True)
+        st.markdown("#### Sample")
+        st.dataframe(stream.head(200), width="stretch", hide_index=True, height=280)
+    elif source == "kaggle":
         st.markdown(
             "#### Kaggle credit-card data\n"
             "Real card transactions made by European cardholders over two days in September 2013, released by "

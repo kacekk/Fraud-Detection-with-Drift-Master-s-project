@@ -82,7 +82,7 @@ def mark_drift(ax, cfg: ExperimentConfig) -> None:
 
 
 def plot_metric(results, cfg: ExperimentConfig, metric: str = "auc", ax=None, title: str | None = None,
-                xlim_months: list[int] | None = None):
+                xlim_months: list[int] | None = None, xlabel: str = "Month"):
     if ax is None:
         _, ax = plt.subplots(figsize=(11, 4.8))
     for key, r in results.items():
@@ -101,7 +101,7 @@ def plot_metric(results, cfg: ExperimentConfig, metric: str = "auc", ax=None, ti
     else:
         ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
     mark_drift(ax, cfg)
-    ax.set_xlabel("Month")
+    ax.set_xlabel(xlabel)
     ax.set_ylabel(METRIC_LABELS.get(metric, metric))
     ax.legend(loc="upper left", bbox_to_anchor=(0, -0.14), ncol=4, fontsize=9, handlelength=2.2,
               columnspacing=1.8)

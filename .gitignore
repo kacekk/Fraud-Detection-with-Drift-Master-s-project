@@ -11,6 +11,9 @@ __pycache__/
 # data you download yourself (too large / licensed separately)
 data/*.csv
 data/*.zip
+data/ieee-cis/*.csv
+data/ieee-cis/*.parquet
+data/ieee-cis/*.zip
 
 # temporary results from quick test runs
 results/*_quick/

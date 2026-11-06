@@ -26,9 +26,12 @@ md("""
 This notebook runs the experiments for my M.Sc. thesis. The question is simple: **when fraudsters change
 their tactics, which way of updating a fraud model copes best?**
 
-I compare four strategies on a stream of card transactions in which the fraud pattern changes at a month
-I choose. Because I control the drift, I know exactly when it happened and can measure how long each
-strategy needs to recover.
+I compare four strategies on two kinds of data:
+
+- **a synthetic stream** in which the fraud pattern changes at a month I choose. Because I control the drift,
+  I know exactly when it happened and can measure how long each strategy needs to recover;
+- **real e-commerce transactions (IEEE-CIS, Vesta Corporation)**, where fraud changes naturally. This shows
+  whether the conclusions hold on real data (section 11).
 
 | Strategy | Idea | Type of adaptation |
 |---|---|---|
@@ -45,7 +48,7 @@ md("""
 ## 1. Setup and reproducibility
 
 Every random step (data generation, Random Forest, Adaptive Random Forest) takes its seed from the config,
-and every model runs single-threaded. Running this notebook again gives **the same numbers every time**.
+and results do not depend on the number of CPU cores. Running this notebook again gives **the same numbers every time**.
 The last section checks this with a fingerprint (a hash of all results).
 """)
 
@@ -269,7 +272,55 @@ seeds.groupby("Strategy", sort=False)[["AUC after drift", "PR-AUC after drift", 
 """)
 
 md("""
-## 11. Realism check on the Kaggle credit-card data (optional)
+## 11. Real data: IEEE-CIS Fraud Detection
+
+590,540 real e-commerce card transactions from Vesta Corporation (IEEE-CIS competition, Kaggle 2019),
+about 3.5% fraud, covering roughly six months. The data is not in the repository: download
+`train_transaction.csv` (and optionally `train_identity.csv`) into `data/ieee-cis/` as described in
+`data/ieee-cis/README.md`, and this section runs automatically.
+
+The timeline is cut into **two-week periods** (13 in total), so "month" in the tables below means one
+period. The drift here is natural: we do not know when it happens, so recovery delay cannot be measured.
+Instead we compare how well and how cheaply each strategy keeps up over time, the same way as on the
+synthetic stream.
+""")
+
+code("""
+from fraud_drift import ieee
+
+if ieee.is_available(ROOT / "data" / "ieee-cis"):
+    ieee_stream, ieee_features = ieee.load_ieee(ROOT / "data" / "ieee-cis")
+    ci = replace(cfg, drift_type="none", n_months=int(ieee_stream.month.max()) + 1)
+    print(f"{len(ieee_stream):,} transactions, {ci.n_months} two-week periods, {len(ieee_features)} features, "
+          f"fraud rate {ieee_stream.is_fraud.mean():.2%}")
+    per = ieee_stream.groupby("month").agg(transactions=("is_fraud", "size"), fraud_rate=("is_fraud", "mean"))
+    display(per.style.format({"fraud_rate": "{:.2%}", "transactions": "{:,}"}))
+else:
+    ieee_stream = None
+    print("data/ieee-cis/train_transaction.csv not found - skipping this section (see data/ieee-cis/README.md).")
+""")
+
+code("""
+if ieee_stream is not None:
+    ieee_results = run_experiment(ci, stream=ieee_stream, features=ieee_features)
+    fig, axes = plt.subplots(1, 2, figsize=(16, 4.8))
+    plot_metric(ieee_results, ci, "auc", ax=axes[0], xlabel="Two-week period", title="IEEE-CIS: ROC-AUC by period")
+    plot_metric(ieee_results, ci, "pr_auc", ax=axes[1], xlabel="Two-week period", title="IEEE-CIS: PR-AUC by period")
+    plt.tight_layout(); plt.show()
+    plot_costs(ieee_results, title="IEEE-CIS: total cost (EUR)")
+    plt.show()
+    display(summary_table(ieee_results, ci))
+""")
+
+md("""
+**How to read it.** If the static model's PR-AUC falls over the periods while the adaptive strategies hold
+steady, the data contains drift that matters in practice, even though nobody labelled when it happened. The
+synthetic experiments explain *why* the strategies differ; this section checks that the ranking and the cost
+trade-offs survive on real transactions.
+""")
+
+md("""
+## 12. Realism check on the ULB credit-card data (optional)
 
 The ULB credit-card dataset (284,807 transactions, 492 frauds) is not in the repository. Download
 `creditcard.csv` from Kaggle and place it in the `data/` folder; this cell will then run automatically.
@@ -290,7 +341,7 @@ else:
 """)
 
 md("""
-## 12. Reproducibility check
+## 13. Reproducibility check
 
 The fingerprint is a hash of every monthly number. If it matches the one saved by
 `python run_experiment.py` in `results/`, the run is identical.

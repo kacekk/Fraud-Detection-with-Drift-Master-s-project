@@ -7,6 +7,7 @@ Examples
     python run_experiment.py --config configs/default.json
     python run_experiment.py --quick                  # small, fast run (used by the tests)
     python run_experiment.py --kaggle data/creditcard.csv
+    python run_experiment.py --ieee                   # real IEEE-CIS data in data/ieee-cis/
 
 Output goes to results/<name>/:
     monthly.csv     one row per strategy and month (AUC, PR-AUC, F1, costs, alarms, ...)
@@ -40,13 +41,14 @@ from fraud_drift import (  # noqa: E402
     run_experiment,
     summary_table,
 )
+from fraud_drift import ieee  # noqa: E402
 from fraud_drift.plotting import plot_costs, plot_metric  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 QUICK = dict(per_month=1000, n_months=10, drift_month=5, recur_month=8, transition_months=3, n_trees=30)
 
 
-def save_run(name: str, cfg: ExperimentConfig, results, out_dir: Path) -> str:
+def save_run(name: str, cfg: ExperimentConfig, results, out_dir: Path, xlabel: str = "Month") -> str:
     out = out_dir / name
     out.mkdir(parents=True, exist_ok=True)
 
@@ -58,7 +60,8 @@ def save_run(name: str, cfg: ExperimentConfig, results, out_dir: Path) -> str:
 
     for metric in ("auc", "pr_auc"):
         fig, ax = plt.subplots(figsize=(11, 5))
-        plot_metric(results, cfg, metric, ax=ax)
+        plot_metric(results, cfg, metric, ax=ax, xlabel=xlabel,
+                    title=None if name not in ("ieee_cis", "kaggle") else f"{metric.upper().replace('_', '-')} by period · {name}")
         fig.tight_layout()
         fig.savefig(out / f"{metric}.png", dpi=150)
         plt.close(fig)
@@ -86,6 +89,9 @@ def main(argv=None) -> dict[str, str]:
     ap.add_argument("--quick", action="store_true", help="small fast run")
     ap.add_argument("--seed", type=int, help="override the seed from the config")
     ap.add_argument("--kaggle", type=Path, help="path to Kaggle creditcard.csv (realism check)")
+    ap.add_argument("--ieee", nargs="?", type=Path, const=ieee.DEFAULT_DIR,
+                    help="run on the real IEEE-CIS data (folder with train_transaction.csv)")
+    ap.add_argument("--period-days", type=int, default=14, help="IEEE-CIS: length of one period in days")
     ap.add_argument("--out", type=Path, default=ROOT / "results")
     args = ap.parse_args(argv)
 
@@ -96,6 +102,17 @@ def main(argv=None) -> dict[str, str]:
         base = replace(base, seed=args.seed)
 
     fingerprints = {}
+    if args.ieee:
+        stream, features = ieee.load_ieee(args.ieee, period_days=args.period_days)
+        cfg = replace(base, drift_type="none", n_months=int(stream.month.max()) + 1).validate()
+        print(f"IEEE-CIS: {len(stream):,} transactions, {cfg.n_months} periods of {args.period_days} days, "
+              f"{len(features)} features")
+        results = run_experiment(cfg, stream=stream, features=features,
+                                 progress=lambda i, n, name: print(f"  [{i}/{n}] {name}", flush=True))
+        fingerprints["ieee_cis"] = save_run("ieee_cis", cfg, results, args.out,
+                                            xlabel=f"Period ({args.period_days} days)")
+        return fingerprints
+
     if args.kaggle:
         stream, features = load_kaggle(args.kaggle, n_months=12)
         cfg = replace(base, drift_type="none", n_months=12).validate()
