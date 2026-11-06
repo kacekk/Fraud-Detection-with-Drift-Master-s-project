@@ -164,6 +164,7 @@ source = sb.radio("Data source", available, format_func=SOURCES.get)
 if len(available) == 1:
     sb.caption("Add the IEEE-CIS files to data/ieee-cis/ to unlock real data (see data/README.md).")
 unit = "two-week period" if source == "ieee" else "month"
+currency, symbol = ("USD", "$") if source == "ieee" else ("EUR", "€")   # IEEE-CIS amounts are in USD
 
 sb.markdown('<div class="side-title">Stream</div>', unsafe_allow_html=True)
 if source == "synthetic":
@@ -217,9 +218,9 @@ with sb.expander("Realism and costs", expanded=False):
     label_delay = st.slider(f"Label delay ({unit}s)", 0, 3, defaults.label_delay,
                             help="Fraud is confirmed weeks later through chargebacks. "
                                  "Models only learn from months whose labels have arrived.")
-    investigation_cost = st.number_input("Checking one false alarm (EUR)", 0.0, 1000.0,
+    investigation_cost = st.number_input(f"Checking one false alarm ({currency})", 0.0, 1000.0,
                                          defaults.investigation_cost, step=5.0)
-    retraining_cost = st.number_input("One model retraining (EUR)", 0.0, 10000.0, defaults.retraining_cost,
+    retraining_cost = st.number_input(f"One model retraining ({currency})", 0.0, 10000.0, defaults.retraining_cost,
                                       step=100.0)
 
 try:
@@ -275,7 +276,7 @@ def strategy_cards(results, summary: pd.DataFrame) -> None:
             f'<div class="big">{main:.3f}<small>{main_label}</small></div>'
             f'<div class="row"><span>Recovery</span><b>{recov}</b></div>'
             f'<div class="row"><span>Retrainings</span><b>{row["Retrainings"]}</b></div>'
-            f'<div class="row"><span>Total cost</span><b>€{row["Total cost (EUR)"]:,.0f}</b></div>'
+            f'<div class="row"><span>Total cost</span><b>{symbol}{row[f"Total cost ({currency})"]:,.0f}</b></div>'
             "</div>"
         )
     html.append("</div>")
@@ -295,7 +296,7 @@ with tab_bench:
     if st.session_state.get("show_compare"):
         with st.spinner("Training and evaluating the four strategies"):
             results = get_results()
-        summary = summary_table(results, cfg)
+        summary = summary_table(results, cfg, currency=currency)
 
         strategy_cards(results, summary)
 

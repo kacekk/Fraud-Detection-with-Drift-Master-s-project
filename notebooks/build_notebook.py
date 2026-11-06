@@ -307,16 +307,51 @@ if ieee_stream is not None:
     plot_metric(ieee_results, ci, "auc", ax=axes[0], xlabel="Two-week period", title="IEEE-CIS: ROC-AUC by period")
     plot_metric(ieee_results, ci, "pr_auc", ax=axes[1], xlabel="Two-week period", title="IEEE-CIS: PR-AUC by period")
     plt.tight_layout(); plt.show()
-    plot_costs(ieee_results, title="IEEE-CIS: total cost (EUR)")
+    plot_costs(ieee_results, title="IEEE-CIS: total cost (USD)")
     plt.show()
-    display(summary_table(ieee_results, ci))
+    display(summary_table(ieee_results, ci, currency="USD"))
 """)
 
 md("""
-**How to read it.** If the static model's PR-AUC falls over the periods while the adaptive strategies hold
-steady, the data contains drift that matters in practice, even though nobody labelled when it happened. The
-synthetic experiments explain *why* the strategies differ; this section checks that the ranking and the cost
-trade-offs survive on real transactions.
+**What the real data shows** (seed 42, default settings; costs in USD because IEEE-CIS amounts are in USD):
+
+1. **The drift is real.** The static model's PR-AUC falls from 0.60 in period 2 to 0.34–0.43 in periods 9–12,
+   while the Random Forests that are retrained stay between about 0.48 and 0.65. Nobody labelled when fraud
+   changed, but a model that is never updated clearly loses value over six months.
+2. **On real data the detector fires almost every period.** With about 1,500 frauds per period, the share of
+   missed frauds moves enough from period to period that ADWIN raises an alarm in 9 of 11 periods, so the
+   detector-triggered strategy behaves almost like the sliding window (8 vs 11 retrainings). The next cell
+   shows how this changes with the detector's sensitivity.
+3. **Online learning with logistic regression is the weakest strategy (PR-AUC about 0.30), but that is mostly
+   the model, not the way it adapts.** A linear model cannot represent these interactions. With an Adaptive
+   Random Forest (`python run.py experiment --ieee --online-model arf`, results in `results/ieee_cis_arf/`)
+   online learning reaches a PR-AUC of about 0.52, still below the retrained Random Forests (about 0.58).
+4. **Cost differences between the adaptive Random Forest strategies are small** (a few percent) and come from a
+   single run, so they should not be presented as a clear winner without repeating the runs with several seeds.
+""")
+
+code("""
+# How sensitive is the detector-triggered strategy to the detector settings? (takes a few minutes)
+if ieee_stream is not None:
+    from fraud_drift.strategies import run_triggered
+    rows = []
+    for det, delta, mon in [("adwin", 0.002, "fraud_recall"), ("adwin", 0.0002, "fraud_recall"),
+                            ("adwin", 0.002, "error_rate"), ("ddm", None, "fraud_recall"), ("ddm", None, "error_rate")]:
+        c = replace(ci, detector=det, adwin_delta=delta or ci.adwin_delta, monitor=mon)
+        r = run_triggered(ieee_stream, ieee_features, c)
+        rows.append({"Detector": det.upper(), "delta": delta if delta else "-", "Watches": mon,
+                     "Alarms": len(r.alarms), "Retrainings": r.n_retrainings,
+                     "PR-AUC": round(r.monthly.pr_auc.mean(), 3), "Total cost (USD)": round(r.monthly.total_cost.sum())})
+    display(pd.DataFrame(rows))
+""")
+
+code("""
+# Online learning with an Adaptive Random Forest instead of logistic regression (saved by the command above)
+arf_file = ROOT / "results" / "ieee_cis_arf" / "summary.csv"
+if arf_file.exists():
+    display(pd.read_csv(arf_file))
+else:
+    print("Run  python run.py experiment --ieee --online-model arf  to create results/ieee_cis_arf/ (about 15-20 min).")
 """)
 
 md("""
@@ -354,6 +389,11 @@ for d in ["sudden", "gradual", "recurring"]:
     info_file = ROOT / "results" / d / "run_info.json"
     saved = json.loads(info_file.read_text())["fingerprint"] if info_file.exists() else "no saved run"
     print(f"{d:<10} this run: {fp}   saved: {saved}   {'identical' if fp == saved else ''}")
+if ieee_stream is not None:
+    fp = results_fingerprint(ieee_results)
+    info_file = ROOT / "results" / "ieee_cis" / "run_info.json"
+    saved = json.loads(info_file.read_text())["fingerprint"] if info_file.exists() else "no saved run"
+    print(f"{'ieee_cis':<10} this run: {fp}   saved: {saved}   {'identical' if fp == saved else ''}")
 """)
 
 nb = nbf.v4.new_notebook()

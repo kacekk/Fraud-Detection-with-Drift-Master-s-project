@@ -17,7 +17,7 @@ COLORS = {
     "online": "#3D8B65",
 }
 MARKERS = {"static": "o", "sliding": "s", "triggered": "^", "online": "D"}
-METRIC_LABELS = {"auc": "ROC-AUC", "pr_auc": "PR-AUC", "f1": "F1", "total_cost": "Cost per month (EUR)"}
+METRIC_LABELS = {"auc": "ROC-AUC", "pr_auc": "PR-AUC", "f1": "F1", "total_cost": "Cost per month"}
 
 INK = "#1F2329"
 MUTED = "#6B7079"
@@ -109,7 +109,7 @@ def plot_metric(results, cfg: ExperimentConfig, metric: str = "auc", ax=None, ti
     return ax
 
 
-def plot_costs(results, ax=None, title: str = "Total cost over the stream (EUR)"):
+def plot_costs(results, ax=None, title: str = "Total cost over the stream"):
     """Horizontal stacked bars: missed fraud, false alarms, retraining."""
     if ax is None:
         _, ax = plt.subplots(figsize=(10, 3.4))

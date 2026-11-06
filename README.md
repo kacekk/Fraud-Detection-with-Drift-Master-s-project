@@ -136,6 +136,21 @@ Each month is scored **before** the model learns its labels.
 
 All tables and charts for the three drift types are in [`results/`](results/).
 
+### Results on the real IEEE-CIS data (seed 42, 13 two-week periods, costs in USD)
+
+| Strategy | ROC-AUC | PR-AUC | Retrainings | Missed frauds | False alarms | Total cost (USD) |
+|---|---|---|---|---|---|---|
+| Static baseline | 0.841 | 0.455 | 0 | 13,875 | 492 | 2,318,963 |
+| Sliding window | 0.898 | 0.582 | 11 | 11,768 | 863 | 2,006,963 |
+| Detector-triggered (ADWIN) | 0.890 | 0.568 | 8 | 11,965 | 844 | 2,044,905 |
+| Online learning, logistic regression | 0.823 | 0.297 | continuous | 15,430 | 1,069 | 2,474,493 |
+| Online learning, Adaptive Random Forest | 0.865 | 0.520 | continuous | 13,601 | 344 | 2,332,045 |
+
+The static model's PR-AUC falls from 0.60 to 0.34–0.43 over six months, so the real data drifts too. On this
+data ADWIN raises an alarm in most periods, so the detector-triggered strategy ends up close to the sliding
+window. Details and a detector-sensitivity table are in section 11 of the notebook; the saved runs are in
+[`results/ieee_cis/`](results/ieee_cis/) and [`results/ieee_cis_arf/`](results/ieee_cis_arf/).
+
 ---
 
 ## Reproducibility: same results every time
@@ -159,6 +174,8 @@ Running the same settings again gives **exactly the same numbers**, on Windows, 
 | sudden | `e86eefc13a1e335b` |
 | gradual | `ba3ec70b64ae29d3` |
 | recurring | `b64949d3e5205776` |
+| IEEE-CIS (`--ieee`) | `96a621b1b635d891` |
+| IEEE-CIS with ARF (`--ieee --online-model arf`) | `05adfcfb9062a8ae` |
 
 - **Automatic check on every push.** GitHub Actions runs the tests on Windows, macOS and Linux
   (Python 3.12 and 3.13). The tests verify that results are identical across reruns and match the

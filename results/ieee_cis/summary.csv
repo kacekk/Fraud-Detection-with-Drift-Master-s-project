@@ -1,0 +1,5 @@
+Strategy,AUC,PR-AUC,F1,Retrainings,Missed frauds,False alarms,Missed fraud (USD),Total cost (USD)
+Static baseline,0.841,0.455,0.331,0,13875,492,2311583.34,2318963.34
+Sliding window,0.898,0.582,0.473,11,11768,863,1988517.9,2006962.9
+Detector-triggered,0.89,0.568,0.462,8,11965,844,2028244.56,2044904.56
+Online learning,0.823,0.297,0.201,continuous,15430,1069,2458457.7,2474492.7

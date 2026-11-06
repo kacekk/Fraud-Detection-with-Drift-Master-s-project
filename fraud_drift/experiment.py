@@ -50,7 +50,8 @@ def run_experiment(
     return results
 
 
-def summary_table(results: dict[str, StrategyResult], cfg: ExperimentConfig, recovery_level: float = 0.8) -> pd.DataFrame:
+def summary_table(results: dict[str, StrategyResult], cfg: ExperimentConfig, recovery_level: float = 0.8,
+                  currency: str = "EUR") -> pd.DataFrame:
     """One row per strategy.
 
     Recovery delay uses PR-AUC (more honest than ROC-AUC when fraud is rare):
@@ -83,8 +84,8 @@ def summary_table(results: dict[str, StrategyResult], cfg: ExperimentConfig, rec
         row["Retrainings"] = "continuous" if key == "online" else str(r.n_retrainings)
         row["Missed frauds"] = int(t.fn.sum())
         row["False alarms"] = int(t.fp.sum())
-        row["Missed fraud (EUR)"] = round(t.cost_missed.sum(), 2)
-        row["Total cost (EUR)"] = round(t.total_cost.sum(), 2)
+        row[f"Missed fraud ({currency})"] = round(t.cost_missed.sum(), 2)
+        row[f"Total cost ({currency})"] = round(t.total_cost.sum(), 2)
         rows.append(row)
     out = pd.DataFrame(rows)
     num = out.select_dtypes("number").columns.difference(["Missed frauds", "False alarms", "Retrainings"])

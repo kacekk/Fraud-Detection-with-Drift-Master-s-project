@@ -48,25 +48,27 @@ ROOT = Path(__file__).resolve().parent
 QUICK = dict(per_month=1000, n_months=10, drift_month=5, recur_month=8, transition_months=3, n_trees=30)
 
 
-def save_run(name: str, cfg: ExperimentConfig, results, out_dir: Path, xlabel: str = "Month") -> str:
+def save_run(name: str, cfg: ExperimentConfig, results, out_dir: Path, xlabel: str = "Month",
+             currency: str = "EUR") -> str:
     out = out_dir / name
     out.mkdir(parents=True, exist_ok=True)
 
     monthly = pd.concat([r.monthly.assign(strategy=k) for k, r in results.items()], ignore_index=True)
     monthly.insert(0, "strategy", monthly.pop("strategy"))
     monthly.round(6).to_csv(out / "monthly.csv", index=False, lineterminator="\n")
-    summary = summary_table(results, cfg)
+    summary = summary_table(results, cfg, currency=currency)
     summary.to_csv(out / "summary.csv", index=False, lineterminator="\n")
 
     for metric in ("auc", "pr_auc"):
         fig, ax = plt.subplots(figsize=(11, 5))
         plot_metric(results, cfg, metric, ax=ax, xlabel=xlabel,
-                    title=None if name not in ("ieee_cis", "kaggle") else f"{metric.upper().replace('_', '-')} by period · {name}")
+                    title=None if not name.startswith(("ieee_cis", "kaggle")) else f"{metric.upper().replace('_', '-')} by period · " + ("IEEE-CIS" if name.startswith("ieee_cis") else "ULB credit-card")
+                    + (" · online model: ARF" if name.endswith("_arf") else ""))
         fig.tight_layout()
         fig.savefig(out / f"{metric}.png", dpi=150)
         plt.close(fig)
     fig, ax = plt.subplots(figsize=(9, 4.5))
-    plot_costs(results, ax=ax)
+    plot_costs(results, ax=ax, title=f"Total cost over the stream ({currency})")
     fig.tight_layout()
     fig.savefig(out / "costs.png", dpi=150)
     plt.close(fig)
@@ -92,6 +94,7 @@ def main(argv=None) -> dict[str, str]:
     ap.add_argument("--ieee", nargs="?", type=Path, const=ieee.DEFAULT_DIR,
                     help="run on the real IEEE-CIS data (folder with train_transaction.csv)")
     ap.add_argument("--period-days", type=int, default=14, help="IEEE-CIS: length of one period in days")
+    ap.add_argument("--online-model", choices=["logreg", "arf"], help="override the online model from the config")
     ap.add_argument("--out", type=Path, default=ROOT / "results")
     args = ap.parse_args(argv)
 
@@ -100,6 +103,9 @@ def main(argv=None) -> dict[str, str]:
         base = replace(base, **QUICK)
     if args.seed is not None:
         base = replace(base, seed=args.seed)
+    if args.online_model:
+        base = replace(base, online_model=args.online_model)
+    suffix = "_arf" if base.online_model == "arf" else ""
 
     fingerprints = {}
     if args.ieee:
@@ -109,8 +115,8 @@ def main(argv=None) -> dict[str, str]:
               f"{len(features)} features")
         results = run_experiment(cfg, stream=stream, features=features,
                                  progress=lambda i, n, name: print(f"  [{i}/{n}] {name}", flush=True))
-        fingerprints["ieee_cis"] = save_run("ieee_cis", cfg, results, args.out,
-                                            xlabel=f"Period ({args.period_days} days)")
+        fingerprints["ieee_cis" + suffix] = save_run("ieee_cis" + suffix, cfg, results, args.out,
+                                            xlabel=f"Period ({args.period_days} days)", currency="USD")
         return fingerprints
 
     if args.kaggle:

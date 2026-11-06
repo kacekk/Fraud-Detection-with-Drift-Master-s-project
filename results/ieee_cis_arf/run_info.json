@@ -1,0 +1,38 @@
+{
+  "name": "ieee_cis_arf",
+  "fingerprint": "05adfcfb9062a8ae",
+  "config": {
+    "per_month": 5000,
+    "n_months": 13,
+    "warmup_months": 2,
+    "fraud_rate": 0.05,
+    "drift_type": "none",
+    "drift_month": 6,
+    "transition_months": 4,
+    "recur_month": 12,
+    "n_trees": 100,
+    "window": 2,
+    "detector": "adwin",
+    "adwin_delta": 0.002,
+    "monitor": "fraud_recall",
+    "online_model": "arf",
+    "threshold": 0.5,
+    "label_delay": 0,
+    "investigation_cost": 15.0,
+    "retraining_cost": 500.0,
+    "seed": 42
+  },
+  "environment": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.44-fc-v242-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "packages": {
+      "numpy": "2.5.3",
+      "pandas": "3.0.5",
+      "scikit-learn": "1.9.1",
+      "river": "0.26.1",
+      "matplotlib": "3.11.2",
+      "streamlit": "1.67.0"
+    }
+  }
+}
