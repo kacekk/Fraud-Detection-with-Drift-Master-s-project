@@ -302,7 +302,7 @@ for d in ["sudden", "gradual", "recurring"]:
     fp = results_fingerprint(results[d])
     info_file = ROOT / "results" / d / "run_info.json"
     saved = json.loads(info_file.read_text())["fingerprint"] if info_file.exists() else "no saved run"
-    print(f"{d:<10} this run: {fp}   saved: {saved}   {'✔ identical' if fp == saved else ''}")
+    print(f"{d:<10} this run: {fp}   saved: {saved}   {'identical' if fp == saved else ''}")
 """)
 
 nb = nbf.v4.new_notebook()

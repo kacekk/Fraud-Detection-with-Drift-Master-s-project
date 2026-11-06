@@ -1,7 +1,12 @@
 [browser]
 gatherUsageStats = false
 
+[client]
+toolbarMode = "minimal"
+
 [theme]
 base = "light"
 primaryColor = "#1F3A5F"
-font = "sans serif"
+backgroundColor = "#FAF9F6"
+secondaryBackgroundColor = "#F2F0EB"
+textColor = "#1F2329"

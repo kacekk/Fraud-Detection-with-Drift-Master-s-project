@@ -2,83 +2,136 @@
 
 from __future__ import annotations
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import Patch
 
 from .config import ExperimentConfig
 
+# muted, print-friendly palette (distinguishable for common colour-vision deficiencies)
 COLORS = {
-    "static": "#C0392B",
-    "sliding": "#2E86C1",
-    "triggered": "#8E44AD",
-    "online": "#1E8449",
+    "static": "#B4503F",
+    "sliding": "#3F6FA8",
+    "triggered": "#7B5EA7",
+    "online": "#3D8B65",
 }
 MARKERS = {"static": "o", "sliding": "s", "triggered": "^", "online": "D"}
 METRIC_LABELS = {"auc": "ROC-AUC", "pr_auc": "PR-AUC", "f1": "F1", "total_cost": "Cost per month (EUR)"}
 
+INK = "#1F2329"
+MUTED = "#6B7079"
+GRID = "#E6E4DF"
+SHADE = "#ECEAE4"
 
-def mark_drift(ax, cfg: ExperimentConfig, upto: int | None = None) -> None:
-    """Draw where and how the fraud pattern changes."""
+STYLE = {
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Inter", "Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"],
+    "font.size": 10,
+    "axes.edgecolor": "#C9C6BF",
+    "axes.labelcolor": MUTED,
+    "axes.titlesize": 12,
+    "axes.titleweight": "semibold",
+    "axes.titlecolor": INK,
+    "axes.titlelocation": "left",
+    "axes.titlepad": 20,
+    "axes.spines.top": False,
+    "axes.spines.right": False,
+    "axes.grid": True,
+    "axes.grid.axis": "y",
+    "grid.color": GRID,
+    "grid.linewidth": 0.8,
+    "xtick.color": MUTED,
+    "ytick.color": MUTED,
+    "xtick.major.size": 0,
+    "ytick.major.size": 0,
+    "legend.frameon": False,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "savefig.facecolor": "white",
+}
+
+
+def apply_style() -> None:
+    """Use the project's chart style everywhere (app, notebook, saved PNGs)."""
+    mpl.rcParams.update(STYLE)
+
+
+apply_style()
+
+
+def mark_drift(ax, cfg: ExperimentConfig) -> None:
+    """Shade where the fraud pattern is changing or changed."""
     if cfg.drift_type == "none":
         return
     end = cfg.n_months - 0.5
-    if upto is not None and upto < cfg.drift_month:
-        return
+    trans = ax.get_xaxis_transform()
+    # labels sit just above the plot area so they never cover the lines
+    label_kw = dict(transform=trans, fontsize=8.5, color=MUTED, va="bottom", clip_on=False)
     if cfg.drift_type == "sudden":
-        ax.axvline(cfg.drift_month - 0.5, color="black", ls="--", lw=1)
-        ax.text(cfg.drift_month - 0.4, 0.02, "sudden drift", transform=ax.get_xaxis_transform(), fontsize=9)
+        ax.axvline(cfg.drift_month - 0.5, color=INK, ls=(0, (4, 3)), lw=1)
+        ax.text(cfg.drift_month - 0.5, 1.01, "sudden drift", ha="center", **label_kw)
     elif cfg.drift_type == "gradual":
         stop = min(cfg.drift_month + cfg.transition_months - 1, cfg.n_months - 1) + 0.5
-        ax.axvspan(cfg.drift_month - 0.5, stop, color="grey", alpha=0.15, lw=0)
-        ax.text(cfg.drift_month - 0.4, 0.02, "gradual drift", transform=ax.get_xaxis_transform(), fontsize=9)
+        ax.axvspan(cfg.drift_month - 0.5, stop, color=SHADE, lw=0, zorder=0)
+        ax.text(cfg.drift_month - 0.45, 1.01, "gradual drift", **label_kw)
     elif cfg.drift_type == "recurring":
-        ax.axvspan(cfg.drift_month - 0.5, min(cfg.recur_month - 0.5, end), color="grey", alpha=0.15, lw=0)
-        ax.text(cfg.drift_month - 0.4, 0.02, "new pattern", transform=ax.get_xaxis_transform(), fontsize=9)
-        ax.text(cfg.recur_month - 0.4, 0.02, "old pattern returns", transform=ax.get_xaxis_transform(), fontsize=9)
+        ax.axvspan(cfg.drift_month - 0.5, min(cfg.recur_month - 0.5, end), color=SHADE, lw=0, zorder=0)
+        ax.text(cfg.drift_month - 0.45, 1.01, "new pattern", **label_kw)
+        ax.text(cfg.recur_month - 0.45, 1.01, "old pattern returns", **label_kw)
 
 
 def plot_metric(results, cfg: ExperimentConfig, metric: str = "auc", ax=None, title: str | None = None,
                 xlim_months: list[int] | None = None):
     if ax is None:
-        _, ax = plt.subplots(figsize=(11, 5))
+        _, ax = plt.subplots(figsize=(11, 4.8))
     for key, r in results.items():
         t = r.monthly
-        ax.plot(t.month, t[metric], marker=MARKERS[key], color=COLORS[key], lw=2, ms=5, label=r.label)
+        ax.plot(t.month, t[metric], marker=MARKERS[key], color=COLORS[key], lw=2, ms=4.5,
+                markeredgecolor="white", markeredgewidth=0.8, label=r.label, zorder=3)
         if key == "triggered":
             for m in r.alarms:
-                ax.axvline(m + 0.5, color=COLORS[key], ls=":", alpha=0.5)
+                ax.axvline(m + 0.5, color=COLORS[key], ls=":", lw=1.2, alpha=0.7, zorder=1)
     months = xlim_months or cfg.eval_months
     ax.set_xlim(min(months) - 0.6, max(months) + 0.6)
+    ax.set_xticks(months)
     if metric in ("auc", "pr_auc", "f1"):
         lo = np.nanmin([r.monthly[metric].min() for r in results.values()])
-        ax.set_ylim(max(0.0, min(0.45, lo - 0.05)), 1.02)
+        ax.set_ylim(max(0.0, min(0.45, lo - 0.05)), 1.04)
+    else:
+        ax.yaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
     mark_drift(ax, cfg)
     ax.set_xlabel("Month")
     ax.set_ylabel(METRIC_LABELS.get(metric, metric))
-    ax.grid(alpha=0.3)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.13), ncol=4, frameon=False)
-    ax.set_title(title or f"{METRIC_LABELS.get(metric, metric)} over time ({cfg.drift_type} drift)")
+    ax.legend(loc="upper left", bbox_to_anchor=(0, -0.14), ncol=4, fontsize=9, handlelength=2.2,
+              columnspacing=1.8)
+    ax.set_title(title if title is not None else f"{METRIC_LABELS.get(metric, metric)} by month · {cfg.drift_type} drift")
     return ax
 
 
-def plot_costs(results, ax=None, title: str = "Total cost over the whole stream"):
+def plot_costs(results, ax=None, title: str = "Total cost over the stream (EUR)"):
+    """Horizontal stacked bars: missed fraud, false alarms, retraining."""
     if ax is None:
-        _, ax = plt.subplots(figsize=(9, 4.5))
-    labels = [r.label for r in results.values()]
-    parts = [("cost_missed", "Missed fraud", 1.0), ("cost_false_alarms", "False alarms", 0.6),
-             ("cost_retraining", "Retraining", 0.3)]
-    bottom = np.zeros(len(labels))
-    for col, name, alpha in parts:
-        vals = np.array([r.monthly[col].sum() for r in results.values()])
-        ax.bar(labels, vals, bottom=bottom, label=name, color=[COLORS[k] for k in results], alpha=alpha,
-               edgecolor="white")
-        bottom += vals
-    for i, v in enumerate(bottom):
-        ax.text(i, v, f"{v:,.0f}", ha="center", va="bottom", fontsize=9)
-    ax.set_ylabel("EUR")
+        _, ax = plt.subplots(figsize=(10, 3.4))
+    keys = list(results)[::-1]
+    labels = [results[k].label for k in keys]
+    parts = [("cost_missed", "Missed fraud", 1.0), ("cost_false_alarms", "False alarms", 0.55),
+             ("cost_retraining", "Retraining", 0.25)]
+    left = np.zeros(len(keys))
+    for col, _, alpha in parts:
+        vals = np.array([results[k].monthly[col].sum() for k in keys])
+        ax.barh(labels, vals, left=left, color=[COLORS[k] for k in keys], alpha=alpha, height=0.58,
+                edgecolor="white", linewidth=1)
+        left += vals
+    for i, v in enumerate(left):
+        ax.text(v + left.max() * 0.01, i, f"{v:,.0f}", va="center", fontsize=9, color=INK)
+    ax.set_axisbelow(True)
+    ax.set_xlim(0, left.max() * 1.12)
+    ax.xaxis.set_major_formatter(mpl.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}"))
+    ax.grid(axis="x")
+    ax.grid(axis="y", visible=False)
+    ax.tick_params(axis="y", colors=INK)
     ax.set_title(title)
-    ax.grid(axis="y", alpha=0.3)
-    from matplotlib.patches import Patch
-    handles = [Patch(facecolor="#555555", alpha=a, label=n) for _, n, a in parts]
-    ax.legend(handles=handles, fontsize=8, loc="upper right")
+    handles = [Patch(facecolor="#4A4E55", alpha=a, label=n) for _, n, a in parts]
+    ax.legend(handles=handles, loc="upper left", bbox_to_anchor=(0, -0.12), ncol=3, fontsize=9)
     return ax

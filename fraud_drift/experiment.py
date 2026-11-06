@@ -80,7 +80,7 @@ def summary_table(results: dict[str, StrategyResult], cfg: ExperimentConfig, rec
             row["AUC"] = t.auc.mean()
             row["PR-AUC"] = t.pr_auc.mean()
         row["F1"] = t.f1.mean()
-        row["Retrainings"] = "continuous" if key == "online" else r.n_retrainings
+        row["Retrainings"] = "continuous" if key == "online" else str(r.n_retrainings)
         row["Missed frauds"] = int(t.fn.sum())
         row["False alarms"] = int(t.fp.sum())
         row["Missed fraud (EUR)"] = round(t.cost_missed.sum(), 2)
